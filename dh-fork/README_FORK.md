@@ -41,8 +41,12 @@ perturbations never exceed δ·Υ.
   So in Table 5, α = 0 means the robust phase trains on the adversarial loss only.
 - **Heston:** S0 = K = 100, v0 = 0.04, κ = 1, b = 0.04, **vol-of-vol σ = 2**, ρ = −0.7,
   30 daily steps, T = 30/365.
-- **Optimiser:** Adam, **lr 0.005** (paper text says 0.05) × {1, 0.1, 0.01, 0.001}
-  stepping at epochs 200 / 500 / 600; batch 10,000; 700 epochs, first 300 clean.
+- **Optimiser:** Adam, batch 10,000, 700 epochs (first 300 clean in the adv script).
+  Learning rates are NOT consistent across their Heston scripts:
+  `Heston_train_clean.py` uses lr 0.05 (matches the paper), decay ×0.1 at 200/400/600;
+  `Heston_train_adv.py` uses lr 0.005, decay ×0.1 at 200/500/600.
+  `Heston_train_sens.py` inherits the adv settings, so sens vs. adv is matched.
+  For a matched clean control, run `Heston_train_sens.py --delta 0`.
 - **Network:** 30 separate per-time-step nets (`RNN_BN_simple`), input (log S, V),
   output 2 holdings (stock, variance swap), BatchNorm.
 - **Partitions:** each run trains `100000 / N` independent networks on disjoint subsets
@@ -52,14 +56,14 @@ perturbations never exceed δ·Υ.
 
 ```bash
 cd src
-python3 Heston_generator.py                                   # writes ../Data/Heston_*.pt
+python Heston_generator.py                                   # writes ../Data/Heston_*.pt
 
 # baseline (clean)
-python3 Heston_train_clean.py --N 10000 --transaction_cost_rate 0.0
+python Heston_train_clean.py --N 10000 --transaction_cost_rate 0.0
 # their robust method (expensive)
-python3 Heston_train_adv.py  --N 10000 --delta 1.0 --alpha 10 --attack_method SV --transaction_cost_rate 0.0
+python Heston_train_adv.py  --N 10000 --delta 1.0 --alpha 10 --attack_method SV --transaction_cost_rate 0.0
 # ours (cheap)
-python3 Heston_train_sens.py --N 10000 --delta 1.0 --alpha 10 --attack_method SV --transaction_cost_rate 0.0
+python Heston_train_sens.py --N 10000 --delta 1.0 --alpha 10 --attack_method SV --transaction_cost_rate 0.0
 ```
 
 (δ, α) per N for SV-Attack from Table 5a: 5k (0.5, 1) · 10k (1.0, 10) · 20k (0.1, 1) ·
