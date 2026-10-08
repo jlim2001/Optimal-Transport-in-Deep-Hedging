@@ -1,0 +1,390 @@
+% =====================================================================
+%  Penalized vs. Constrained Wasserstein Adversarial Training
+%  in Deep Hedging  --  REPORT SKELETON
+%
+%  * Grey boxes (\guide{...}) say what belongs in each part. Hide all of them
+%    at once with \showguidesfalse below.
+%  * Dashed boxes (\placeholderfig) mark figures to produce.
+%  * Red [TODO] marks things to fill in or verify.
+%  * Written equations are the settled formulation; check against the code.
+% =====================================================================
+\documentclass[11pt]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+
+% ---------- guidance toggles ----------
+\newif\ifshowguides
+\showguidestrue            % <-- \showguidesfalse hides all guidance
+\newcommand{\guide}[1]{\ifshowguides
+  \par\smallskip\noindent\fcolorbox{gray!50}{gray!6}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small\itshape\color{gray!80!black}#1}}\par\smallskip\fi}
+\newcommand{\placeholderfig}[3]{% {caption}{label}{what to plot}
+  \begin{figure}[htbp]\centering
+  \fbox{\parbox[c][4.5cm][c]{0.8\linewidth}{\centering\small\itshape\color{gray!70!black}FIGURE TO PRODUCE:\\[3pt] #3}}
+  \caption{#1}\label{#2}\end{figure}}
+\newcommand{\todo}[1]{\textcolor{red!70!black}{[TODO: #1]}}
+
+% ---------- notation ----------
+\newtheorem{proposition}{Proposition}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Ups}{\Upsilon}
+\newcommand{\cvar}{\mathrm{CVaR}}
+\newcommand{\PnL}{\mathrm{PnL}}
+
+\title{Penalized versus Constrained Wasserstein Adversarial Training\\in Deep Hedging\\[4pt]\large QF4204 Project Report}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% =====================================================================
+\begin{abstract}
+\guide{Write LAST, 150--200 words: (1) deep hedges are fragile to model misspecification;
+(2) \cite{he2025} train against the worst case in a Wasserstein ball of fixed radius $\delta$ and
+report sensitivity to $\delta$; (3) we replace the hard constraint by a Lagrangian penalty
+$\lambda$ with the same transport cost; (4) headline findings in numbers: matched performance,
+sensitivity of out-of-distribution risk to $\lambda$ vs.\ $\delta$, cross-robustness.}
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}\label{sec:intro}
+\guide{About 1 page. (a) Deep hedging \cite{buehler2019} learns hedges from simulated paths and
+inherits simulator error. (b) Robust deep hedging: parameter uncertainty \cite{lss2022};
+Wasserstein adversarial training \cite{he2025}, the strongest recent result. (c) Their stated
+limitation: performance depends on the radius $\delta$, which may differ across models.
+(d) Penalized Wasserstein DRO \cite{sinha2018} is the Lagrangian counterpart of the constrained
+problem; with a fixed penalty the effective radius adapts to the model during training.
+(e) Research question and contributions.}
+
+\paragraph{Research question.}
+\todo{Does replacing the hard Wasserstein constraint in adversarial deep hedging with a Lagrangian
+penalty, under the same transport cost, preserve hedging robustness, and does it reduce the
+sensitivity of out-of-distribution performance to the robustness hyperparameter?}
+
+\paragraph{Contributions.}\mbox{}
+\guide{Keep checkable, one-to-one with \cref{sec:results}:
+(1) a penalized adversary for deep hedging with exactly the geometry of \cite{he2025}'s attack,
+so only constraint vs.\ penalty differs;
+(2) a first-order calibration $\lambda(\delta)=\Ups/(2\delta)$ from \cite{bartl2021} that matches
+the two formulations' strength;
+(3) a controlled comparison of in- and out-of-distribution CVaR, sensitivity to the
+hyperparameter, and cross-robustness. Claim ``to our knowledge'' novelty only after checking
+\cite{he2025}'s related work.}
+
+% =====================================================================
+\section{Background and related work}\label{sec:background}
+\subsection{Deep hedging}
+\guide{\cite{buehler2019}: network hedge positions, convex risk measure of terminal P\&L,
+simulated paths; handles frictions and incomplete markets.}
+
+\subsection{Robust deep hedging}
+\guide{\cite{lss2022}: robustness through the training DATA (parameter intervals).
+\cite{he2025}: robustness through the OBJECTIVE (worst case in a Wasserstein ball, solved by a
+projected attack); its first-order structure comes from \cite{bartl2021,bai2023}. Your work
+changes how that objective's ball is enforced.}
+
+\subsection{Constrained and penalized Wasserstein DRO}
+\guide{Define the Wasserstein ball and the worst-case expectation. State the Lagrangian dual
+linking the constrained and penalized problems \cite{blanchet2019,gao2023} (\cref{eq:duality}).
+Penalized adversarial training for neural networks: \cite{sinha2018}, with a convergence
+guarantee when the loss is smooth in the input and $\lambda$ exceeds its curvature. Sensitivity
+of the worst case in $\delta$: \cite{bartl2021}, used here for calibration.}
+
+% =====================================================================
+\section{Problem setup}\label{sec:setup}
+\guide{Match the authors' code exactly. Notation: $h_t$ hedge positions, $\delta$ radius,
+$\lambda$ penalty, $\alpha$ CVaR level, $\gamma$ clean-loss weight (code: \texttt{--alpha}).}
+
+\subsection{Market model}
+Under the Heston model \cite{heston1993},
+\begin{equation}\label{eq:heston}
+dS_t = \sqrt{v_t}\,S_t\,dW^1_t,\qquad
+dv_t = \kappa(b - v_t)\,dt + \sigma\sqrt{v_t}\,dW^2_t,\qquad
+d\langle W^1,W^2\rangle_t = \rho\,dt ,
+\end{equation}
+simulated with a Broadie--Kaya-type scheme. Variance risk is hedged with a variance swap whose
+price $S^{(2)}_t$ is a closed-form function of the variance path (\cite{he2025}, App.~B).
+
+\begin{table}[htbp]\centering
+\caption{Simulation parameters (\texttt{Heston\_generator.py}).}\label{tab:params}
+\begin{tabular}{lll}\toprule
+Parameter & Symbol & Value\\\midrule
+Initial spot / strike & $S_0$, $K$ & 100\\
+Initial variance & $v_0$ & 0.04\\
+Mean reversion & $\kappa$ & 1\\
+Long-run variance & $b$ & 0.04\\
+Vol-of-vol & $\sigma$ & 2\\
+Correlation & $\rho$ & $-0.7$\\
+Drift & $\mu$ & 0\\
+Maturity / steps & $T$, $n$ & $30/365$, 30\\
+CVaR level & $\alpha$ & 0.5\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Hedging objective}
+Positions $h_t=f^{\theta_t}_t(\log S_t, v_t)\in\mathbb{R}^2$ (stock, variance swap), one network per
+step. Short a call, $Z=(S_T-K)^+$; loss $X=Z-\PnL_\theta$, $\PnL_\theta=\sum_{t<n}h_t\cdot(\bm S_{t+1}-\bm S_t)$.
+With the Rockafellar--Uryasev form of CVaR \cite{rockafellar2000},
+\begin{equation}\label{eq:loss}
+\ell(\theta,w;x)=w+\frac{\big(Z(x)-\PnL_\theta(x)-w\big)^+}{1-\alpha},\qquad
+\cvar_\alpha(X)=\min_w \E[\ell(\theta,w;x)],
+\end{equation}
+with path $x=(S,v)$ and threshold $w$ (\texttt{p0}) trained jointly with $\theta$.
+
+\subsection{Transport cost}
+Per path and coordinate $c\in\{S,V\}$, with $V$ measured in units scaled by 100 and $t=0$ fixed,
+\begin{equation}\label{eq:cost}
+c(x,x')=\sum_{c\in\{S,V\}}\ \max_{1\le t\le n}|x_{c,t}-x'_{c,t}|^2,
+\qquad W_c(P,Q)=\inf_{\pi\in\Pi(P,Q)}\E_\pi[c(x,x')] .
+\end{equation}
+\guide{Stress that BOTH formulations use exactly this cost; the only difference is how it is
+bounded.}
+
+% =====================================================================
+\section{Method}\label{sec:method}
+
+\subsection{Constrained formulation (baseline)}
+\begin{equation}\label{eq:constrained}
+\mathcal{V}_\delta(\theta,w)=\sup_{Q:\,W_c(P,Q)\le\delta^2}\E_Q[\ell(\theta,w;x)],\qquad
+\min_{\theta,w_c,w_a}\ \gamma\,\E_P[\ell(\theta,w_c;x)]+\mathcal{V}_\delta(\theta,w_a).
+\end{equation}
+\guide{Approximated in \cite{he2025} by a 20-iteration budget attack with one shared budget across
+paths, projected onto the ball (step size $4\delta/20$).}
+
+\subsection{Penalized formulation (ours)}
+\begin{equation}\label{eq:penalized}
+\mathcal{V}^\lambda(\theta,w)=\sup_Q\big\{\E_Q[\ell]-\lambda W_c(P,Q)\big\}
+=\E_P\Big[\sup_{x'}\big\{\ell(\theta,w;x')-\lambda\,c(x,x')\big\}\Big],
+\end{equation}
+\begin{equation}\label{eq:pentrain}
+\min_{\theta,w_c,w_a}\ \gamma\,\E_P[\ell(\theta,w_c;x)]+\mathcal{V}^\lambda(\theta,w_a).
+\end{equation}
+The inner problem in \eqref{eq:penalized} separates across paths. Since $\lambda c$ does not
+depend on $\theta$, the gradient of \eqref{eq:pentrain} is that of $\ell$ at the per-path
+maximisers $x^*(x)$ (Danskin), so training differs from \eqref{eq:constrained} only in the attack.
+
+\subsection{Relation between the two}
+Under standard conditions \cite{blanchet2019,gao2023},
+\begin{equation}\label{eq:duality}
+\mathcal{V}_\delta(\theta,w)=\inf_{\lambda\ge0}\big\{\lambda\delta^2+\mathcal{V}^\lambda(\theta,w)\big\}.
+\end{equation}
+\guide{Interpretation: the constrained problem is the penalized one with a multiplier that is
+re-optimised for every $\theta$. Fixing $\lambda$ instead fixes the PRICE of transport, so the
+realised radius changes as the network changes. This is the mechanism behind research question
+(2): it may make performance less sensitive to the hyperparameter, or weaken the adversary.}
+
+\subsection{Calibrating $\lambda$ to $\delta$}
+For the cost \eqref{eq:cost}, linearising $\ell$ gives the per-path best response
+$b_{n,c}=\|\nabla_{x_c}\ell_n\|_1/(2\lambda)$ (norms over $t\ge1$), hence a realised radius
+\begin{equation}\label{eq:calib}
+\Big(\E\textstyle\sum_c b_{n,c}^2\Big)^{1/2}=\frac{\Ups}{2\lambda},\qquad
+\Ups=\Big(\E\textstyle\sum_c\|\nabla_{x_c}\ell\|_1^2\Big)^{1/2},
+\qquad\Longrightarrow\qquad \lambda(\delta)=\frac{\Ups}{2\delta},
+\end{equation}
+where $\Ups$ is the sensitivity of \cite{bartl2021} for this cost
+($\mathcal{V}_\delta=\E\ell+\delta\Ups+o(\delta)$).
+\guide{Derivation in \cref{app:derivation}, including the consistency check that plugging
+\eqref{eq:calib} into \eqref{eq:duality} recovers $\E\ell+\delta\Ups$. Calibrate on the clean
+network the robust phase starts from; it is a first-order match, verified empirically in
+\cref{sec:res-calib}.}
+
+\subsection{The penalized attack}
+\begin{algorithm}[htbp]
+\caption{Penalized attack for one batch (same parameterisation as \cite{he2025}'s budget attack).}\label{alg:pen}
+\begin{algorithmic}[1]
+\State $g\gets\nabla_x\ell$ at the clean paths; set $g_{\cdot,0}=0$
+\State $s\gets\mathrm{sign}(g)$, \ $b_{n,c}\gets\|g_{n,c}\|_1/(2\lambda)$ \Comment{exact optimum of linearised problem}
+\For{$k=1,\dots,K$}
+  \State $D_{n,c,t}\gets b_{n,c}s_{n,c,t}$; evaluate $J_n=\ell_n(x+D)-\lambda c_n(D)$; keep best $D$ per path
+  \State $s\gets\mathrm{clip}\big(s+0.75\,\mathrm{sign}(\partial\ell/\partial s)+0.25(s-s_{\mathrm{old}}),-1,1\big)$, $s_{\cdot,0}=0$
+  \State $b\gets\max\big\{(1-\kappa)\,b+\kappa\,(\partial\ell/\partial b)/(2\lambda m^2),\,0\big\}$, \ $m=\max_t|s|$
+\EndFor
+\State \Return best $x+D$ per path, and realised radius $(\mathrm{mean}_n\,c_n)^{1/2}$
+\end{algorithmic}
+\end{algorithm}
+\guide{Convergence (\cref{app:convergence}): if the loss is $\mu$-strongly concave along the
+budget, the budget update converges to the optimum iff $\lambda>-\mu/2$, at rate
+$1-\kappa(1+\mu/2\lambda)$ per step; below the threshold the inner problem is unbounded. ReLU,
+the CVaR kink and the sup-norm cost mean the smoothness assumption of \cite{sinha2018} fails,
+so state that no guarantee is claimed and check stability empirically.}
+
+% =====================================================================
+\section{Experimental design}\label{sec:experiments}
+\subsection{Data}
+Training sets of size $N$ (state which), each run on $10^5/N$ disjoint partitions, capped at
+\todo{number} partitions. Test: first \todo{$10^5$} of $10^6$ in-distribution paths.
+Out-of-distribution: 100 configurations $\times$ 10\,000 paths, each of $\kappa,b,\sigma,\rho$
+scaled by a uniform factor in $[0.9,1.1]$.
+
+\subsection{Training arms}
+\guide{(i) Clean, matched control: authors' adversarial script with $\delta=0$ (same learning
+rate and schedule as the robust arms; the authors' clean script uses a different learning rate,
+0.05 vs.\ 0.005 --- report this). (ii) Constrained, $\delta$ from \cref{tab:hyper}. (iii)
+Penalized, $\lambda$ calibrated by \eqref{eq:calib}, same $\gamma$. Then sweeps of $\delta$ and
+$\lambda$ at one $N$. Same epochs (300 clean + 400 robust), optimiser, partitions for all.}
+
+\begin{table}[htbp]\centering
+\caption{Radius and clean-loss weight per training size (SV-attack), \cite{he2025} Table~5a.}\label{tab:hyper}
+\begin{tabular}{lccccc}\toprule
+$N$ & 5\,000 & 10\,000 & 20\,000 & 50\,000 & 100\,000\\\midrule
+$\delta$ & 0.5 & 1.0 & 0.1 & 0.03 & 0.005\\
+$\gamma$ (code: \texttt{alpha}) & 1 & 10 & 1 & 0 & 0\\
+$\lambda(\delta)$, \eqref{eq:calib} & \todo{} & \todo{} & \todo{} & \todo{} & \todo{}\\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Metrics}
+\guide{(i) In-distribution $\cvar_{0.5}$; (ii) out-of-distribution $\cvar_{0.5}$, mean and worst
+over the 100 configurations; (iii) $\cvar_{0.5}$ under the constrained attack at $\delta$ and under
+the penalized attack at $\lambda$ (every model faces both); (iv) realised radius of each attack;
+(v) training time (context only). Mean $\pm$ std over partitions.}
+
+% =====================================================================
+\section{Results}\label{sec:results}
+\subsection{Calibration check}\label{sec:res-calib}
+\guide{Output of \texttt{calibrate\_lambda.py --verify}: for each $\delta$, the calibrated $\lambda$ and
+the ratio realised radius$/\delta$. Near 1 at small $\delta$ confirms \eqref{eq:calib}; the drift at
+large $\delta$ measures nonlinearity.}
+
+\subsection{Matched comparison}
+\begin{table}[htbp]\centering
+\caption{Hedging risk ($\cvar_{0.5}$, lower is better), mean $\pm$ std over partitions.}\label{tab:main}
+\begin{tabular}{llcccc}\toprule
+$N$ & Method & In-dist. & OOD mean & OOD worst & Attacked ($\delta$ / $\lambda$)\\\midrule
+10k & Clean & & & & \\
+    & Constrained & & & & \\
+    & Penalized & & & & \\\midrule
+20k & Clean & & & & \\
+    & Constrained & & & & \\
+    & Penalized & & & & \\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sensitivity to the robustness hyperparameter}
+\placeholderfig{Out-of-distribution risk against realised radius, both formulations.}{fig:sensitivity}{x: realised radius (log scale), from sweeping $\delta$ (constrained) and $\lambda$ (penalized). y: OOD CVaR, mean over partitions with bands. Horizontal line: clean. Headline figure.}
+\guide{Quantify ``flatness'', e.g.\ the spread of OOD CVaR over each grid, or the regret of a
+mis-chosen hyperparameter relative to the best one. State the grids.}
+
+\subsection{Cross-robustness}
+\begin{table}[htbp]\centering
+\caption{$\cvar_{0.5}$ of each trained model under each adversary.}\label{tab:cross}
+\begin{tabular}{lcc}\toprule
+Trained with $\downarrow$ / attacked by $\rightarrow$ & Constrained ($\delta$) & Penalized ($\lambda$)\\\midrule
+Clean & & \\
+Constrained & & \\
+Penalized & & \\\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training dynamics}
+\placeholderfig{Realised radius of the adversary during the robust phase.}{fig:radius}{x: epoch 300--700. y: realised radius. Penalized at a few $\lambda$ (logged by \texttt{Heston\_train\_pen.py}); constrained is flat at $\delta$. Explains the mechanism behind \cref{fig:sensitivity}.}
+
+\subsection{Computational cost (context)}
+\guide{Seconds per robust-phase epoch for both. One sentence; not a research question.}
+
+% =====================================================================
+\section{Discussion}\label{sec:discussion}
+\guide{When does the adaptive radius help or hurt? Does penalized training trade worst-case
+protection for typical-case performance? What does cross-robustness say about the two notions
+of robustness? Relate to \cite{he2025}'s limitation on radius sensitivity without overclaiming.}
+
+\section{Limitations and future work}\label{sec:limitations}
+\guide{(1) No convergence guarantee for the inner problem (non-smooth loss and cost); iteration
+count fixed at 20; small $\lambda$ can be unbounded. (2) Calibration is first order. (3) Choice of
+CVaR threshold inside the attack (batch quantile vs.\ trained $w_a$). (4) Simulated Heston only;
+Black--Scholes not run. (5) One transport cost; a squared-$\ell_2$ cost would be a genuine geometry
+change. (6) Plain Wasserstein on paths allows anticipative perturbations; causal transport is
+the principled fix \todo{verify and cite causal-DRO sensitivity work}.}
+
+\section{Conclusion}\label{sec:conclusion}
+\guide{One paragraph with the headline numbers.}
+
+% =====================================================================
+\appendix
+\section{Linearised best response and calibration}\label{app:derivation}
+\guide{With $g=\nabla_x\ell$ and $D_{n,c}=b_{n,c}s_{n,c}$, H\"older gives
+$\langle g_{n,c},D_{n,c}\rangle\le\|g_{n,c}\|_1 b_{n,c}$, attained at $s=\mathrm{sign}(g)$. Maximise
+$\|g_{n,c}\|_1b-\lambda b^2$: $b^*=\|g_{n,c}\|_1/(2\lambda)$, value $\|g_{n,c}\|_1^2/(4\lambda)$. So
+$\mathcal{V}^\lambda\approx\E\ell+\Ups^2/(4\lambda)$ and the realised radius is $\Ups/(2\lambda)$.
+Consistency: in \eqref{eq:duality}, $\min_\lambda\{\lambda\delta^2+\Ups^2/(4\lambda)\}=\delta\Ups$ at
+$\lambda=\Ups/(2\delta)$, recovering \cite{bartl2021}'s $\E\ell+\delta\Ups$. Include the numerical
+verification (linear loss: objective $\Ups^2/(4\lambda)$, radius $\Ups/(2\lambda)$, random perturbations
+never better).}
+
+\section{Convergence of the budget update}\label{app:convergence}
+\guide{Along a fixed sign profile let $\ell(b)=Gb-\tfrac{\mu}{2}b^2$. The update
+$b\leftarrow(1-\kappa)b+\kappa(G-\mu b)/(2\lambda)$ has fixed point $G/(2\lambda+\mu)$ and factor
+$1-\kappa(1+\mu/2\lambda)$: it converges iff $0<\kappa(1+\mu/2\lambda)<2$, i.e.\ (for $\kappa\le1$) iff
+$\lambda>-\mu/2$. Below the threshold the objective is unbounded. Report the NumPy check.}
+
+\section{Implementation and reproducibility}\label{app:impl}
+\guide{Repository and commit hash; files added (\texttt{penalized.py}, \texttt{Heston\_train\_pen.py},
+\texttt{calibrate\_lambda.py}, \texttt{evaluate.py}, \texttt{sensitivity.py}); authors' files unmodified;
+attack in eval mode; threshold option; \texttt{--b\_max}; exact commands per table and figure; hardware
+and run times. Note: the authors' attack always runs 20 iterations (its \texttt{iter} argument
+only sets the step size).}
+
+% =====================================================================
+\begin{thebibliography}{99}
+
+\bibitem{buehler2019}
+H.~Buehler, L.~Gonon, J.~Teichmann, and B.~Wood.
+\newblock Deep hedging.
+\newblock \emph{Quantitative Finance}, 19(8):1271--1291, 2019.
+
+\bibitem{he2025}
+G.~He, T.~Sutter, and L.~Gonon.
+\newblock Distributional adversarial attacks and training in deep hedging.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2025.
+\newblock arXiv:2508.14757.
+
+\bibitem{lss2022}
+E.~L{\"u}tkebohmert, T.~Schmidt, and J.~Sester.
+\newblock Robust deep hedging.
+\newblock \emph{Quantitative Finance}, 22(8):1465--1480, 2022.
+
+\bibitem{sinha2018}
+A.~Sinha, H.~Namkoong, and J.~Duchi.
+\newblock Certifying some distributional robustness with principled adversarial training.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2018.
+
+\bibitem{blanchet2019}
+J.~Blanchet and K.~Murthy.
+\newblock Quantifying distributional model risk via optimal transport.
+\newblock \emph{Mathematics of Operations Research}, 44(2):565--600, 2019.
+
+\bibitem{gao2023}
+R.~Gao and A.~Kleywegt.
+\newblock Distributionally robust stochastic optimization with {W}asserstein distance.
+\newblock \emph{Mathematics of Operations Research}, 48(2):603--655, 2023.
+
+\bibitem{bartl2021}
+D.~Bartl, S.~Drapeau, J.~Ob{\l}{\'o}j, and J.~Wiesel.
+\newblock Sensitivity analysis of {W}asserstein distributionally robust optimization problems.
+\newblock \emph{Proceedings of the Royal Society A}, 477:20210176, 2021.
+
+\bibitem{bai2023}
+X.~Bai, G.~He, Y.~Jiang, and J.~Ob{\l}{\'o}j.
+\newblock Wasserstein distributional robustness of neural networks.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023.
+
+\bibitem{rockafellar2000}
+R.~T. Rockafellar and S.~Uryasev.
+\newblock Optimization of conditional value-at-risk.
+\newblock \emph{Journal of Risk}, 2(3):21--41, 2000.
+
+\bibitem{heston1993}
+S.~L. Heston.
+\newblock A closed-form solution for options with stochastic volatility with applications to bond and currency options.
+\newblock \emph{Review of Financial Studies}, 6(2):327--343, 1993.
+
+\end{thebibliography}
+\end{document}
