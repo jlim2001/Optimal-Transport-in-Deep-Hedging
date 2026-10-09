@@ -31,6 +31,10 @@ Duchi 2018), keeping the same transport cost, and ask:
 | `src/calibrate_lambda.py` | maps each δ to a matched λ ≈ Υ/(2δ) and verifies the realised radius |
 | `src/evaluate.py` | in-distribution, out-of-distribution and cross-attack CVaR → CSV |
 | `src/sensitivity.py` | the first-order term Υ (Bartl–Drapeau–Obłój–Wiesel), used for calibration |
+| `src/naming.py` | parses run names (method, N, δ, λ, α, partition) from model and log filenames |
+| `src/runlog.py` | per-epoch training-log format (`<run>_part<K>_log.csv`) |
+| `src/parse_logs.py` | recovers those logs from the authors' printed output (captured with `tee`) |
+| `src/summarise.py` | averages over partitions; writes the report's tables and figures |
 
 ### Same geometry, different enforcement
 Perturbation of path n, coordinate c ∈ {S, V}: `D = b_{n,c} · s_{n,c,t}`, `b ≥ 0`, `s ∈ [−1, 1]`;
@@ -96,6 +100,39 @@ python evaluate.py --models "../Result/Heston_SV*_N1e4*" --deltas 0.1 1.0 --lams
 ```
 
 Table 5a (SV-attack) (δ, alpha): 5k (0.5, 1) · 10k (1.0, 10) · 20k (0.1, 1) · 50k (0.03, 0) · 100k (0.005, 0).
+
+## Where results are saved
+
+| What | File (in `Result/`) | Written by |
+|---|---|---|
+| Trained models | `<run>_part<K>.pth` | training scripts |
+| Per-epoch log: losses, adversary radius, seconds, thresholds, LR | `<run>_part<K>_log.csv` | `Heston_train_pen.py` (live); `parse_logs.py` for the authors' scripts |
+| Captured screen output of the authors' scripts | `stdout_*.txt` | you, via `tee` |
+| Evaluation, one row per model, tagged with method/N/δ/λ/α/part | `eval_*.csv` | `evaluate.py` |
+| Tables and figures for the report | `summary/` | `summarise.py` |
+
+`summary/` contains: `runs.csv` (everything, per run), `main_table.tex` (RQ1),
+`fig_sensitivity.pdf` + `sensitivity.csv` (RQ2), `cross_table.tex/.csv` (RQ3),
+`fig_radius.pdf` (radius during training), `cost.csv` (context).
+
+Pipeline:
+```bash
+# the authors' scripts print but don't log: capture their output
+python Heston_train_adv.py --N 10000 --delta 1.0 --alpha 10 --attack_method SV \
+    2>&1 | tee ../Result/stdout_SVatt_N1e4_delta1.0.txt
+python parse_logs.py ../Result/stdout_*.txt          # -> *_log.csv
+# ours logs itself (tee optional)
+python Heston_train_pen.py --N 10000 --lam 12.5 --alpha 10 --attack_method SV --n_parts 3
+python evaluate.py --models "../Result/Heston_SV*_N1e4*.pth" --deltas 0.1 1.0 --lams 10 30 \
+    --out ../Result/eval_N1e4.csv
+python summarise.py --eval "../Result/eval_*.csv" --N 10000
+```
+**Training radius** (x-axis of the sensitivity figure): δ for constrained runs (nominal; the budget
+attack projects to δ), the mean logged radius over the robust phase for penalized runs.
+**Spread/regret** in `sensitivity.csv` are only comparable if both grids cover a similar range of
+training radii; choose the λ grid (via `calibrate_lambda.py`) so they do.
+Tested end to end on synthetic data in the exact formats the scripts write (figures checked
+visually, LaTeX tables compile); not yet on real runs.
 
 ## Caveats
 1. **No convergence guarantee.** Sinha et al.'s guarantee needs a loss smooth in the paths and

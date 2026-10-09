@@ -30,6 +30,10 @@ An earlier direction (first-order sensitivity penalty as a cheap replacement) wa
 - `evaluate.py` — in-dist CVaR (Heston_test.pt), OOD mean/worst over 100 configs
   (Heston_OODP.pt), CVaR under constrained (deltas) and penalized (lams) attacks with radii -> CSV.
 - `sensitivity.py` — Upsilon for the authors' ball (verified numerically).
+- `naming.py` (parse run names), `runlog.py` (per-epoch log format), `parse_logs.py`
+  (authors' printed output -> *_log.csv), `summarise.py` (tables + figures -> Result/summary/).
+  Results pipeline is documented in README_FORK.md 'Where results are saved'.
+  ALWAYS run the authors' scripts with `2>&1 | tee ../Result/stdout_<run>.txt` (they don't log).
 
 ## Facts about the authors' code
 - `--alpha` weights the CLEAN loss: loss = alpha*clean + 1.0*adversarial.

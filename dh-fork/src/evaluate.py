@@ -12,7 +12,8 @@ Evaluate trained hedging networks (clean, constrained-adversarial, penalized) on
 Usage:
     python evaluate.py --models "../Result/Heston_SVatt_N1e4*" "../Result/Heston_SVpen_N1e4*" \
                        --deltas 0.1 1.0 --lams 5 50 --out ../Result/eval.csv
-Rows are written per model file (= per partition); average over partitions downstream.
+Rows are written per model file (= per partition) and tagged with run, method, attack,
+N, delta, lam, alpha, part (parsed from the filename); summarise.py averages over parts.
 """
 import argparse
 import csv
@@ -20,6 +21,7 @@ import glob
 import torch
 from Heston_util import *
 from penalized import Heston_Penalized_Attacker, realised_radius_from_att
+from naming import parse_name, FIELDS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 sequence_length = 30
@@ -55,7 +57,9 @@ for f in files:
     net = RNN_BN_simple(sequence_length=sequence_length).to(device)
     net.load_state_dict(torch.load(f, map_location=device))
     net.eval()
-    row = {"model": f}
+    # identify the run from its filename (method, N, delta/lam, alpha, partition)
+    meta = parse_name(f) or {k: None for k in FIELDS}
+    row = {"model": f, **meta}
     with torch.no_grad():
         row["cvar_in"] = attacker.perfromance(net, S_te, V_te)[0]
         ood = []

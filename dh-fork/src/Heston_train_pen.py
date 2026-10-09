@@ -6,7 +6,8 @@ Derived from the authors' Heston_train_adv.py. Differences, all marked [FORK]:
      penalized attack (penalty lam) from penalized.py;
   2. --lam, --iters, --kappa, --p0_attack, --b_max select the penalized adversary;
   3. --n_parts, --epochs, --warmup allow short smoke tests (defaults = authors' values);
-  4. the realised radius of the adversary is logged each epoch.
+  4. the realised radius of the adversary is logged each epoch, and every epoch is
+     written to ../Result/<name>_part<K>_log.csv (see runlog.py).
 Everything else (data, network, CVaR loss, optimiser, LR schedule, clean-loss weight
 alpha1, BatchNorm momentum, p0 handling) is unchanged.
 """
@@ -14,6 +15,7 @@ import torch
 import torch.nn as nn
 from Heston_util import *
 from penalized import Heston_Penalized_Attacker          # [FORK]
+from runlog import EpochLogger                           # [FORK]
 import argparse
 import time
 
@@ -148,6 +150,8 @@ for part in range(0, n_parts):
             module.momentum = 1.0
 
     print(f'Start Running {name}_part{int(part)}')
+    # [FORK] per-epoch log next to the saved model (same part numbering as the .pth)
+    logger = EpochLogger(f"../Result/{name}_part{int(part)+1}_log.csv")
     for i in range(epoch_num):
         time1 = time.time()
         network.train()
@@ -162,8 +166,14 @@ for part in range(0, n_parts):
         print(f"epoch{i},clean_loss: {train_result[1]:.6f}, att_loss: {train_result[0]:.6f}, "
               f"radius: {train_result[2]:.5f}, time: {time2-time1}s, "
               f"p0_clean: {p0_clean.item()}, p0_att: {p0_att.item()}")
+        logger.log(epoch=i, phase="clean" if i < warmup else "robust",
+                   clean_loss=train_result[1], att_loss=train_result[0],
+                   radius=train_result[2] if i >= warmup else "",
+                   seconds=time2 - time1, p0_clean=p0_clean.item(), p0_att=p0_att.item(),
+                   lr=opt.param_groups[0]["lr"])
         LR_scheduler.step()
 
+    logger.close()
     network.to('cpu')
     network.device = 'cpu'
     torch.save(network.state_dict(), f"../Result/{name}_part{int(part)+1}.pth")
