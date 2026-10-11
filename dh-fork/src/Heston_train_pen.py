@@ -17,6 +17,7 @@ from Heston_util import *
 from penalized import Heston_Penalized_Attacker          # [FORK]
 from runlog import EpochLogger                           # [FORK]
 import argparse
+import os
 import time
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,7 +100,8 @@ parser.add_argument("--iters", type=int, default=20, help="[FORK] refinement ste
 parser.add_argument("--kappa", type=float, default=0.5, help="[FORK] budget-update damping in (0,1].")
 parser.add_argument("--p0_attack", type=str, default="search", choices=["search", "given"],
                     help="[FORK] CVaR threshold inside the attack: batch quantile (as authors) or trained p0_att.")
-parser.add_argument("--b_max", type=float, default=0.0, help="[FORK] cap on per-path budget (0 = none).")
+parser.add_argument("--b_max", type=float, default=5.0,
+                    help="[FORK] cap on each per-path budget in attack units (0 = none). Guards against runaway when lam is below the loss curvature.")
 parser.add_argument("--n_parts", type=int, default=0, help="[FORK] partitions to train (0 = all, as authors).")
 parser.add_argument("--epochs", type=int, default=700, help="[FORK] total epochs (authors: 700).")
 parser.add_argument("--warmup", type=int, default=300, help="[FORK] clean warm-up epochs (authors: 300).")
@@ -119,6 +121,13 @@ epoch_num, warmup = args.epochs, args.warmup
 name = (f"Heston_{attack_method}pen_N{N:.0e}_lam{lam}_alpha{int(alpha1)}_tran{transaction_cost_rate:.0e}"
         .replace("+0", "").replace("+", ""))
 Heston_data_train = torch.load('../Data/Heston_train.pt')
+# [FORK] runs with non-default schedule/attack length (smoke tests) are saved to
+# ../Result/smoke/ so they can never be mistaken for real results by evaluate.py
+is_full_run = (epoch_num, warmup, iters) == (700, 300, 20)
+result_dir = '../Result' if is_full_run else '../Result/smoke'
+os.makedirs(result_dir, exist_ok=True)
+if not is_full_run:
+    print(f'NOTE: non-default epochs/warmup/iters -> saving to {result_dir} (smoke test)')
 
 n_parts_total = int(1e5 / N)
 n_parts = n_parts_total if args.n_parts <= 0 else min(args.n_parts, n_parts_total)
@@ -151,7 +160,7 @@ for part in range(0, n_parts):
 
     print(f'Start Running {name}_part{int(part)}')
     # [FORK] per-epoch log next to the saved model (same part numbering as the .pth)
-    logger = EpochLogger(f"../Result/{name}_part{int(part)+1}_log.csv")
+    logger = EpochLogger(f"{result_dir}/{name}_part{int(part)+1}_log.csv")
     for i in range(epoch_num):
         time1 = time.time()
         network.train()
@@ -176,4 +185,4 @@ for part in range(0, n_parts):
     logger.close()
     network.to('cpu')
     network.device = 'cpu'
-    torch.save(network.state_dict(), f"../Result/{name}_part{int(part)+1}.pth")
+    torch.save(network.state_dict(), f"{result_dir}/{name}_part{int(part)+1}.pth")

@@ -35,10 +35,13 @@ parser.add_argument("--attack_method", type=str, default="SV")
 parser.add_argument("--deltas", type=float, nargs="*", default=[])
 parser.add_argument("--lams", type=float, nargs="*", default=[])
 parser.add_argument("--iters", type=int, default=20)
+parser.add_argument("--b_max", type=float, default=5.0,
+                    help="cap on each per-path budget in the penalized attack (attack units); paths hitting it are reported in capped_penalized_l*")
 parser.add_argument("--out", type=str, default="../Result/eval.csv")
 args = parser.parse_args()
 
-files = sorted({f for pat in args.models for f in glob.glob(pat)})
+# only model files: patterns like Heston_SV*_N1e4* also match the *_log.csv training logs
+files = sorted({f for pat in args.models for f in glob.glob(pat) if f.endswith('.pth')})
 if not files:
     raise SystemExit("no model files matched")
 
@@ -55,7 +58,11 @@ n_cfg, per_cfg = 100, 10000
 rows = []
 for f in files:
     net = RNN_BN_simple(sequence_length=sequence_length).to(device)
-    net.load_state_dict(torch.load(f, map_location=device))
+    try:
+        net.load_state_dict(torch.load(f, map_location=device))
+    except Exception as e:                       # truncated / still-being-written file
+        print(f"SKIP {f}: could not load ({type(e).__name__}: {e})")
+        continue
     net.eval()
     # identify the run from its filename (method, N, delta/lam, alpha, partition)
     meta = parse_name(f) or {k: None for k in FIELDS}
@@ -78,9 +85,11 @@ for f in files:
         row[f"radius_constrained_d{d}"] = realised_radius_from_att(a_used)
     for lam in args.lams:
         S_a, V_a, _, info = attacker.penalized_attack(net, S_at, V_at, lam, n_iter=args.iters,
-                                                      attack_method=args.attack_method)
+                                                      attack_method=args.attack_method,
+                                                      b_max=args.b_max)
         row[f"cvar_penalized_l{lam}"] = attacker.perfromance(net, S_a, V_a)[0]
         row[f"radius_penalized_l{lam}"] = info["radius"]
+        row[f"capped_penalized_l{lam}"] = info["frac_at_cap"]   # > 0: unbounded at this lam
     rows.append(row)
     print({k: (round(v, 5) if isinstance(v, float) else v) for k, v in row.items()})
 

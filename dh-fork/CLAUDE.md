@@ -46,11 +46,17 @@ An earlier direction (first-order sensitivity penalty as a cheap replacement) wa
 - Table 5a SV (delta, alpha): 5k(0.5,1) 10k(1.0,10) 20k(0.1,1) 50k(0.03,0) 100k(0.005,0).
 
 ## Status
-- NOTHING HAS BEEN RUN (written without working PyTorch). Python compiles; attacker math
-  verified in NumPy (linear-loss optimum, radius = Ups/(2 lam), convergence iff lam > -mu/2,
-  divergence below it).
-- Riskiest untested parts: penalized_attack autograd on leaves b, s; per-path best tracking;
-  double backprop in sensitivity.upsilon (calibration only).
+- Pipeline RUNS on the user's Mac (training + evaluate.py produced rows for SVatt and SVpen at N=1e4).
+- Fixed after first real run: (a) evaluate.py globbed *_log.csv and crashed in torch.load ->
+  now .pth only, unloadable files skipped; (b) penalized attack at small lam ran away (radius
+  2125, NaN CVaR from log of negative S) -> perturbed S kept >= 1% of S, V >= 0, cost charged on
+  the displacement actually applied, budget cap b_max=5 by default in training and evaluation,
+  `capped_penalized_l*` column = fraction of paths at the cap (> 0 => unbounded at that lam).
+- First numbers (N=1e4): constrained delta=1, alpha=10: cvar_in 2.79. The SVpen lam10 alpha1
+  model (cvar_in 3.55) is almost certainly the 3-EPOCH SMOKE TEST (same lam/alpha as the smoke
+  command); discard it. Smoke tests now save to Result/smoke/. Real penalized run: lam from
+  calibrate_lambda.py for delta=1 (user's evaluation used lam=2.32933, radius 1.04 on the
+  constrained model => calibration consistent) with --alpha 10.
 
 ## Next steps
 1. `python Heston_generator.py`; smoke test:

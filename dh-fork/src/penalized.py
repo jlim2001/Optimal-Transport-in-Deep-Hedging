@@ -64,11 +64,21 @@ class Heston_Penalized_Attacker(Heston_Attacker):
         return torch.clamp(X - p0, min=0.0) / (1.0 - a) + p0
 
     @staticmethod
-    def _perturb(S, V, b, s, nC):
+    def _perturb(S, V, b, s, nC, s_floor=0.01):
+        """
+        Apply D = b * s, keeping paths admissible: S_att >= s_floor * S (prices stay
+        positive, so log S is defined) and V_att >= 0. The transport cost is charged
+        on the displacement ACTUALLY applied, so clamping never under-reports the radius.
+        """
         D = b.unsqueeze(1) * s                        # (B, T+1, nC)
-        S_att = S + D[:, :, 0]
-        V_att = V + D[:, :, 1] / 100.0 if nC == 2 else V
-        return S_att, V_att, D
+        S_att = torch.maximum(S + D[:, :, 0], s_floor * S)
+        if nC == 2:
+            V_att = torch.clamp(V + D[:, :, 1] / 100.0, min=0.0)
+            D_eff = torch.stack([S_att - S, (V_att - V) * 100.0], dim=-1)
+        else:
+            V_att = V
+            D_eff = (S_att - S).unsqueeze(-1)
+        return S_att, V_att, D_eff
 
     @staticmethod
     def transport_cost(D):
@@ -150,10 +160,16 @@ class Heston_Penalized_Attacker(Heston_Attacker):
         S_att = S + best_D[:, :, 0]
         V_att = V + best_D[:, :, 1] / 100.0 if nC == 2 else V
         VarPrice_att = self.V_to_VarPrice(V_att)
+        b_fin = best_D.abs().amax(dim=1)              # per-path, per-coordinate budget used
         info = {
             "radius": self.transport_cost(best_D).mean().sqrt().item(),
             "objective": best_J.mean().item(),
             "loss_gain": (best_l.mean() - clean_mean).item(),
+            "max_budget": b_fin.max().item(),
+            # fraction of paths whose budget hit b_max: > 0 means the inner problem is
+            # (numerically) unbounded at this lam -- lam is below the loss curvature
+            "frac_at_cap": (b_fin >= 0.999 * b_max).any(dim=1).float().mean().item()
+                           if b_max is not None else float("nan"),
         }
         return S_att.detach(), V_att.detach(), VarPrice_att.detach(), info
 

@@ -85,7 +85,8 @@ during training; `Heston_train_pen.py` logs it every epoch.
 cd src
 python Heston_generator.py                       # ../Data/Heston_{train,val,test,OODP}.pt
 
-# smoke test (minutes)
+# smoke test (minutes). Checks the code runs; NOT a result. Because epochs/warmup/iters
+# differ from the defaults, outputs go to ../Result/smoke/ and evaluate.py never sees them.
 python Heston_train_pen.py --N 10000 --lam 10 --n_parts 1 --epochs 3 --warmup 1 --iters 2
 
 # 1. clean network for calibration (authors' script, delta 0 = no attack)
@@ -122,7 +123,7 @@ python Heston_train_adv.py --N 10000 --delta 1.0 --alpha 10 --attack_method SV \
     2>&1 | tee ../Result/stdout_SVatt_N1e4_delta1.0.txt
 python parse_logs.py ../Result/stdout_*.txt          # -> *_log.csv
 # ours logs itself (tee optional)
-python Heston_train_pen.py --N 10000 --lam 12.5 --alpha 10 --attack_method SV --n_parts 3
+python Heston_train_pen.py --N 10000 --lam <lambda for delta=1 from calibrate_lambda.py> --alpha 10 --attack_method SV --n_parts 3
 python evaluate.py --models "../Result/Heston_SV*_N1e4*.pth" --deltas 0.1 1.0 --lams 10 30 \
     --out ../Result/eval_N1e4.csv
 python summarise.py --eval "../Result/eval_*.csv" --N 10000
